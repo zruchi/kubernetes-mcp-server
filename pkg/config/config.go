@@ -119,6 +119,16 @@ type StaticConfig struct {
 	// (the STS gateway), which is required for cross-realm deployments and for using
 	// token exchange together with skip_jwt_verification=true.
 	StsTokenURL string `toml:"sts_token_url,omitempty"`
+	// SkipExchangeContexts is a list of filepath.Match globs evaluated
+	// against the target name (the kubeconfig context name when the
+	// kubeconfig cluster provider is in use). When a target matches,
+	// token exchange is skipped entirely and the bearer token is
+	// forwarded as-is. Useful for cluster fleets that mix flavors with
+	// different issuer trust (e.g. EKS clusters configured with the
+	// user-token issuer directly, alongside vanilla clusters that trust
+	// an STS gateway). Evaluation runs before token_exchange_strategy so
+	// the two are orthogonal.
+	SkipExchangeContexts []string `toml:"skip_exchange_contexts,omitempty"`
 	// ClusterAuthMode determines how the MCP server authenticates to the cluster.
 	// Valid values: "passthrough" (forward Authorization header, with optional exchange), "kubeconfig" (use kubeconfig credentials).
 	// If empty, defaults to passthrough: forwards the token when present, falls back to kubeconfig when absent.
@@ -462,6 +472,10 @@ func (c *StaticConfig) GetStsTokenURL() string {
 	return c.StsTokenURL
 }
 
+func (c *StaticConfig) GetSkipExchangeContexts() []string {
+	return c.SkipExchangeContexts
+}
+
 func (c *StaticConfig) GetCertificateAuthority() string {
 	return c.CertificateAuthority
 }
@@ -588,11 +602,26 @@ func (c *StaticConfig) Validate() error {
 	if err := c.validateTokenExchange(); err != nil {
 		return err
 	}
+	if err := c.validateSkipExchangeContexts(); err != nil {
+		return err
+	}
 	if err := c.validateConfirmation(); err != nil {
 		return err
 	}
 	if err := c.HTTP.Validate(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateSkipExchangeContexts ensures every entry in skip_exchange_contexts
+// is a syntactically valid filepath.Match glob. Bad patterns are caught at
+// startup rather than silently mismatching at runtime.
+func (c *StaticConfig) validateSkipExchangeContexts() error {
+	for i, pattern := range c.SkipExchangeContexts {
+		if _, err := filepath.Match(pattern, ""); err != nil {
+			return fmt.Errorf("skip_exchange_contexts[%d]: invalid glob %q: %w", i, pattern, err)
+		}
 	}
 	return nil
 }

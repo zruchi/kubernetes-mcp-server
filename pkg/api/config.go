@@ -79,6 +79,14 @@ type StsConfigProvider interface {
 	GetCertificateAuthority() string
 }
 
+// SkipExchangeContextsProvider exposes the top-level skip_exchange_contexts
+// list, evaluated as filepath.Match globs against the target name passed
+// to the token-exchange dispatcher (the kubeconfig context name when the
+// kubeconfig cluster provider is in use).
+type SkipExchangeContextsProvider interface {
+	GetSkipExchangeContexts() []string
+}
+
 // ValidationEnabledProvider provides access to validation enabled setting.
 type ValidationEnabledProvider interface {
 	IsValidationEnabled() bool
@@ -101,6 +109,7 @@ type BaseConfig interface {
 	DeniedResourcesProvider
 	ExtendedConfigProvider
 	StsConfigProvider
+	SkipExchangeContextsProvider
 	ValidationEnabledProvider
 	RequireTLSProvider
 	RequireOAuthProvider

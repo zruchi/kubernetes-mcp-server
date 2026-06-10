@@ -272,6 +272,28 @@ func (s *ValidateSuite) TestTokenExchangeStrategy() {
 	})
 }
 
+func (s *ValidateSuite) TestSkipExchangeContexts() {
+	s.Run("empty list passes", func() {
+		cfg := s.validConfig()
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("valid globs pass", func() {
+		cfg := s.validConfig()
+		cfg.SkipExchangeContexts = []string{"eks-*", "exact-context"}
+		s.NoError(cfg.Validate())
+	})
+
+	s.Run("malformed glob is rejected with index in error", func() {
+		cfg := s.validConfig()
+		cfg.SkipExchangeContexts = []string{"valid-pattern", "[unclosed"}
+		err := cfg.Validate()
+		s.Require().Error(err)
+		s.Contains(err.Error(), "skip_exchange_contexts[1]")
+		s.Contains(err.Error(), "[unclosed")
+	})
+}
+
 func (s *ValidateSuite) TestStsAuthStyle() {
 	s.Run("invalid sts_auth_style is rejected", func() {
 		cfg := s.validConfig()

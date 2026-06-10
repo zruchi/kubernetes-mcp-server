@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/containers/kubernetes-mcp-server/pkg/api"
@@ -12,6 +13,28 @@ import (
 	"golang.org/x/oauth2"
 	"k8s.io/klog/v2"
 )
+
+// shouldSkipExchange returns true when the target name matches any glob in
+// skip_exchange_contexts. Evaluated before the TokenExchangeProvider and
+// global-STS branches so the skip cannot interact with any STS fallback.
+func shouldSkipExchange(baseConfig api.BaseConfig, target string) bool {
+	patterns := baseConfig.GetSkipExchangeContexts()
+	if len(patterns) == 0 {
+		return false
+	}
+	for _, pattern := range patterns {
+		matched, err := filepath.Match(pattern, target)
+		if err != nil {
+			klog.V(2).Infof("invalid skip_exchange_contexts glob %q: %v", pattern, err)
+			continue
+		}
+		if matched {
+			klog.V(5).Infof("target %q matched skip_exchange_contexts %q, skipping exchange", target, pattern)
+			return true
+		}
+	}
+	return false
+}
 
 // resolveStsTokenURL returns the explicit sts_token_url if configured;
 // otherwise falls back to the OIDC provider's discovered token endpoint.
@@ -46,6 +69,10 @@ func ExchangeTokenInContext(
 		return ctx, nil
 	}
 	subjectToken := strings.TrimPrefix(auth, "Bearer ")
+
+	if shouldSkipExchange(baseConfig, target) {
+		return ctx, nil
+	}
 
 	tep, ok := provider.(TokenExchangeProvider)
 	if !ok {

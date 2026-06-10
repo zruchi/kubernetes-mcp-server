@@ -719,6 +719,46 @@ Configure cluster provider-specific settings via the `cluster_provider_configs` 
 # kcp-specific configuration
 ```
 
+### Skipping Token Exchange Per Cluster
+
+The top-level `skip_exchange_contexts` setting bypasses token exchange for
+specific targets. Each entry is a `filepath.Match` glob evaluated against
+the target name passed to the dispatcher — the kubeconfig context name
+when the kubeconfig cluster provider is in use.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `skip_exchange_contexts` | []string | List of `filepath.Match` globs evaluated against the target name. When a target matches, token exchange is skipped entirely and the bearer token is forwarded as-is. Evaluated **before** `token_exchange_strategy`, so the two are orthogonal. |
+
+Typical example: vanilla Kubernetes clusters configured (via structured
+auth) to trust an internal STS gateway, mixed with EKS clusters which can
+only trust a single OIDC issuer — the user-token issuer (e.g. Okta) — and
+would reject an exchanged token. The vanilla clusters need exchange; EKS
+contexts must be skipped.
+
+```toml
+require_oauth             = true
+authorization_url         = "https://idp.example.com"
+oauth_audience            = "<your-audience>"
+cluster_provider_strategy = "kubeconfig"
+cluster_auth_mode         = "passthrough"
+
+token_exchange_strategy  = "rfc8693"
+sts_token_url            = "https://sts-gateway.example.internal/oauth2/token"
+sts_client_id            = "kubernetes-mcp-server"
+sts_audience             = "vanilla-clusters"
+sts_subject_token_type   = "urn:ietf:params:oauth:token-type:jwt"
+sts_requested_token_type = "urn:ietf:params:oauth:token-type:jwt"
+
+# Targets matching this list bypass token_exchange_strategy entirely.
+# Names use Go's filepath.Match glob syntax.
+skip_exchange_contexts   = ["eks-*"]
+```
+
+For the example above, requests targeting any kubeconfig context whose
+name matches `eks-*` forward the original bearer token; all other contexts
+go through `rfc8693` exchange against `sts_token_url`.
+
 ## CLI Configuration Options
 
 The following options can be set via command-line arguments. CLI arguments override TOML configuration values.
